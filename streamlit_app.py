@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tamil Study Buddy - Streamlit App
+Tamil Study Buddy - Streamlit App (Optimized for HF Spaces)
 Fine-tuned Tamil Language Model with Chat Interface
 """
 
@@ -9,6 +9,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import time
 from datetime import datetime
+import os
+import sys
 
 # Page configuration
 st.set_page_config(
@@ -43,6 +45,18 @@ st.markdown("""
         padding: 1rem;
         text-align: center;
     }
+    .error-box {
+        background-color: #ffebee;
+        border-left: 4px solid #f44336;
+        padding: 1rem;
+        border-radius: 4px;
+    }
+    .success-box {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4caf50;
+        padding: 1rem;
+        border-radius: 4px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -50,13 +64,48 @@ st.markdown("""
 @st.cache_resource
 def load_model():
     """Load fine-tuned Tamil model"""
-    model_path = "./tamil-study-buddy-finetuned"
     try:
+        # Try multiple possible paths
+        possible_paths = [
+            "./tamil-study-buddy-finetuned",
+            "/app/tamil-study-buddy-finetuned",
+            "tamil-study-buddy-finetuned",
+        ]
+        
+        model_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                model_path = path
+                st.write(f"✅ Found model at: {path}")
+                break
+        
+        if model_path is None:
+            st.error("❌ Model directory not found. Checked paths:")
+            for path in possible_paths:
+                st.write(f"  - {path}")
+            return None, None
+        
+        st.write(f"📦 Loading model from: {model_path}")
+        
+        # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(model_path)
-        model = AutoModelForCausalLM.from_pretrained(model_path)
+        st.write("✅ Tokenizer loaded")
+        
+        # Load model with optimization
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None
+        )
+        st.write("✅ Model loaded successfully")
+        
         return model, tokenizer
+        
     except Exception as e:
-        st.error(f"Error loading model: {e}")
+        st.error(f"❌ Error loading model: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        import traceback
+        st.error(traceback.format_exc())
         return None, None
 
 # Initialize session state
@@ -68,6 +117,9 @@ if "query_count" not in st.session_state:
 
 if "start_time" not in st.session_state:
     st.session_state.start_time = datetime.now()
+
+if "model_loaded" not in st.session_state:
+    st.session_state.model_loaded = False
 
 # Header
 col1, col2, col3 = st.columns([1, 2, 1])
@@ -132,6 +184,15 @@ with st.sidebar:
         if st.button(f"📝 {example}", key=example):
             st.session_state.query_input = example
     
+    # System info
+    st.divider()
+    st.subheader("ℹ️ System Info")
+    st.write(f"**Python**: {sys.version.split()[0]}")
+    st.write(f"**PyTorch**: {torch.__version__}")
+    st.write(f"**CUDA Available**: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        st.write(f"**GPU**: {torch.cuda.get_device_name(0)}")
+    
     # About
     st.divider()
     st.subheader("ℹ️ About")
@@ -147,18 +208,41 @@ with st.sidebar:
 # Main content
 st.subheader("💬 Chat with Tamil Study Buddy")
 
-# Load model
-model, tokenizer = load_model()
+# Load model with status
+with st.spinner("🔄 Loading model... (This may take 1-2 minutes on first run)"):
+    model, tokenizer = load_model()
+    st.session_state.model_loaded = model is not None and tokenizer is not None
 
 if model is None or tokenizer is None:
-    st.error("❌ Failed to load model. Please check the model files.")
+    st.markdown("""
+    <div class="error-box">
+    <h3>❌ Model Loading Failed</h3>
+    <p>The model could not be loaded. This might be because:</p>
+    <ul>
+        <li>The model files are still being downloaded</li>
+        <li>There's not enough memory available</li>
+        <li>The model path is incorrect</li>
+    </ul>
+    <p><strong>Please wait a few moments and refresh the page.</strong></p>
+    </div>
+    """, unsafe_allow_html=True)
 else:
+    st.markdown("""
+    <div class="success-box">
+    <h3>✅ Model Ready</h3>
+    <p>The model has loaded successfully. You can now chat!</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Chat history display
     st.subheader("Chat History")
     
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+    if len(st.session_state.messages) == 0:
+        st.info("💬 No messages yet. Start by typing something in Tamil!")
+    else:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
     
     # Input area
     st.divider()
@@ -224,7 +308,10 @@ else:
                 st.rerun()
                 
             except Exception as e:
-                st.error(f"❌ Error generating response: {e}")
+                st.error(f"❌ Error generating response: {str(e)}")
+                st.error(f"Error type: {type(e).__name__}")
+                import traceback
+                st.error(traceback.format_exc())
     
     # Clear chat button
     if st.button("🗑️ Clear Chat History"):
