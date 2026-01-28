@@ -1,3 +1,15 @@
+---
+title: Tamil Study Buddy
+emoji: 🇮🇳
+colorFrom: ff6b35
+colorTo: ffffff
+sdk: streamlit
+sdk_version: 1.28.1
+app_file: streamlit_app.py
+pinned: false
+license: mit
+---
+
 # 🇮🇳 Tamil Study Buddy - Fine-tuned Model & Streamlit App
 
 **AI Tutor for Colloquial Tamil Learning** - A fine-tuned language model trained on colloquial Tamil data with a beautiful Streamlit interface.
